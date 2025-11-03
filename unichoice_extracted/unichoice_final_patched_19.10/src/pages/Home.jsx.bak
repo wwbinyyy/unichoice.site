@@ -1,0 +1,45 @@
+import data from '../data/universities.json';
+import Filters from '../components/Filters';
+import Card from '../components/Card';
+import SearchBar from '../components/SearchBar';
+import Fuse from 'fuse.js';
+import { useEffect, useMemo, useState } from 'react';
+
+export default function Home(){
+  const all = data.universities;
+  const [list,setList]=useState(all);
+  const [filters,setFilters]=useState(null);
+  const fuse = useMemo(()=> new Fuse(all, { keys:['name','city','country','strengths'], threshold:0.35 }), [all]);
+
+  function applyFilters(q){
+    let res = all;
+    if(q){
+      if(q.country) res = res.filter(u=> u.country.toLowerCase().startsWith(q.country.toLowerCase()));
+      if(q.city) res = res.filter(u=> u.city.toLowerCase().startsWith(q.city.toLowerCase()));
+      if(q.majors?.length) res = res.filter(u=> q.majors.some(m=> (u.strengths||[]).includes(m)));
+      if(q.lang) res = res.filter(u=> (u.languages||[]).includes(q.lang));
+      if(q.maxTuition!=null) res = res.filter(u=> (u.tuitionAnnual??0) <= q.maxTuition);
+      if(q.minRating!=null) res = res.filter(u=> (u.rating??0) >= q.minRating);
+      if(q.hasGrant==='yes') res = res.filter(u=> u.hasGrant);
+      if(q.hasGrant==='no') res = res.filter(u=> !u.hasGrant);
+      if(q.q) res = fuse.search(q.q).map(r=>r.item);
+    }
+    setList(res);
+  }
+
+  useEffect(()=>{ applyFilters(filters); },[filters]);
+
+  return (
+    <div className="container mx-auto px-4 py-6 space-y-4">
+      <div className="card p-4"><SearchBar onPick={(it)=> setList([it])}/></div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-3"><Filters onApply={setFilters}/></div>
+        <div className="lg:col-span-9">
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {list.map(u=> (<Card key={u.id} u={u}/>))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

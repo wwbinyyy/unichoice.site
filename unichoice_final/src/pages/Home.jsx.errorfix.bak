@@ -1,0 +1,339 @@
+import data from '../data/universities.json';
+import Filters from '../components/Filters';
+import Card from '../components/Card';
+import SearchBar from '../components/SearchBar';
+import Fuse from 'fuse.js';
+import { useEffect, useMemo, useState } from 'react';
+
+/**
+ * Enhanced Home.jsx
+ * - Adds contextual hints under search and filters
+ * - Passes auto-suggest items (universities, countries, cities, majors) to SearchBar
+ * - Shows a first-run registration modal (saved in localStorage uc.user)
+ * - Adds a JSON viewer toggle to display universities data on-site
+ * - Injects a small CSS override to wrap action buttons inside cards so they never overflow
+ */
+export default function Home(){
+  const all = data.universities;
+  const [list,setList]=useState(all);
+  const [filters,setFilters]=useState(null);
+  const fuse = useMemo(()=> new Fuse(all, { keys:['name','city','country','strengths'], threshold:0.35 }), [all]);
+
+  // Build suggestion items for the global SearchBar
+  const suggestItems = useMemo(()=>{
+    const names = all.map(u=>u.name);
+    const countries = Array.from(new Set(all.map(u=>u.country)));
+    const cities = Array.from(new Set(all.map(u=>u.city)));
+    const majors = Array.from(new Set(all.flatMap(u=>u.strengths||[])));
+    return [...names, ...countries, ...cities, ...majors];
+  },[all]);
+
+  // Registration gate (simple, localStorage-based)
+  const [showReg, setShowReg] = useState(()=>{
+    try {
+      const u = JSON.parse(localStorage.getItem('uc.user')||'null');
+      return !u;
+    } catch { return true; }
+  });
+  const [reg, setReg] = useState({ name:'', email:'', country:'', level:'Bachelor' });
+  const [sentCode, setSentCode] = useState(null);
+  const [code, setCode] = useState('');
+  const handleRegister = (e)=>{
+    e.preventDefault();
+    // Minimal validation
+    if(!reg.name || !reg.email.includes('@') || !reg.country){
+      alert('Пожалуйста, укажите имя, страну и корректный email.');
+      return;
+    }
+    localStorage.setItem('uc.user', JSON.stringify({...reg, createdAt: Date.now()}));
+    setShowReg(false);
+  };
+
+  function applyFilters(q){
+    let res = all;
+    if(q){
+      // combine Fuse results with manual includes for simple tokens
+      const tokens = q.toLowerCase().split(/[,\s]+/).filter(Boolean);
+      const fRes = fuse.search(q).map(r=>r.item);
+      const includes = all.filter(u=> tokens.every(t=> 
+        (u.name||'').toLowerCase().includes(t) ||
+        (u.country||'').toLowerCase().includes(t) ||
+        (u.city||'').toLowerCase().includes(t) ||
+        (u.strengths||[]).some(m=>(m||'').toLowerCase().includes(t))
+      ));
+      const set = new Map();
+      [...fRes, ...includes].forEach(u=> set.set(u.id, u));
+      res = Array.from(set.values());
+    }
+    if(filters){
+      res = res.filter(u=>{
+        if(filters.country && u.country!==filters.country) return false;
+        if(filters.city && u.city!==filters.city) return false;
+        if(filters.lang && !(u.languages||[]).includes(filters.lang)) return false;
+        if(filters.hasGrant==='yes' && !u.hasGrant) return false;
+        if(filters.hasGrant==='no' && u.hasGrant) return false;
+        if(filters.maxTuition && u.tuition && u.tuition>filters.maxTuition) return false;
+        if(filters.minRating && (u.rating||0) < filters.minRating) return false;
+        if(filters.majors?.length){
+          const setMaj = new Set(u.strengths||[]);
+          if(!filters.majors.every(m=> setMaj.has(m))) return false;
+        }
+return true;
+      });
+    }
+    setList(res);
+  }
+
+  useEffect(()=>{ applyFilters(); },[filters]);
+
+  // JSON viewer toggle
+  const [showJSON, setShowJSON] = useState(false);
+
+  return (
+    <div className="container mx-auto px-4 py-6 space-y-4">
+      {/* CSS fix: make the last row (actions) inside each card wrap on small screens */}
+      <style>{`
+        .card > div:last-child { flex-wrap: wrap; row-gap: 0.5rem; }
+        .card > div:last-child > * { flex: 1 1 auto; }
+        @media (min-width: 640px){
+          .card > div:last-child > * { flex: 0 0 auto; }
+        }
+      `}</style>
+
+      {/* Registration modal */}
+      {/* Registration modal */}
+      {showReg && (
+  <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+    <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5 space-y-4">
+      <h2 className="text-xl font-semibold">Регистрация</h2>
+      <p className="text-sm text-gray-600 dark:text-gray-300">
+        Укажите имя, Gmail и страну. Мы отправим код подтверждения на вашу почту.
+      </p>
+
+      {!sentCode && (
+        <form className="space-y-3" onSubmit={(e)=>{e.preventDefault();}}>
+          <div>
+            <label className="block text-sm mb-1">Имя</label>
+            <input className="w-full px-3 py-2 rounded-xl border dark:bg-gray-800 dark:border-gray-700" 
+                   placeholder="Ваше имя"
+                   value={reg.name}
+                   onChange={e=>setReg({...reg, name:e.target.value})}/>
+          </div>
+
+          <div>
+            <label className="block text-sm mb-1">Gmail</label>
+            <input className="w-full px-3 py-2 rounded-xl border dark:bg-gray-800 dark:border-gray-700" 
+                   type="email"
+                   placeholder="you@gmail.com"
+                   value={reg.email}
+                   onChange={e=>setReg({...reg, email:e.target.value})}/>
+            <div className="text-xs text-gray-500 mt-1">Только адреса на gmail.com</div>
+          </div>
+
+          <div>
+            <label className="block text-sm mb-1">Страна</label>
+            <input className="w-full px-3 py-2 rounded-xl border dark:bg-gray-800 dark:border-gray-700" 
+                   placeholder="Казахстан"
+                   value={reg.country}
+                   onChange={e=>setReg({...reg, country:e.target.value})}/>
+          </div>
+
+          <button
+            onClick={()=>{
+              if(!reg.name||!reg.country||!reg.email) { alert('Заполните имя, gmail и страну.'); return; }
+              if(!/^[^@]+@gmail\.com$/i.test(reg.email)) { alert('Укажите корректный Gmail (только @gmail.com).'); return; }
+              const codeGen = String(Math.floor(100000 + Math.random()*900000));
+              setSentCode(codeGen);
+              // имитация отправки письма
+              try {
+                localStorage.setItem('uc.lastCode', codeGen);
+              } catch {}
+              alert('Код подтверждения отправлен (для демо: ' + codeGen + ')');
+            }}
+            className="w-full px-4 py-2 rounded-xl bg-brand-600 text-white hover:bg-brand-700"
+          >
+            Отправить код
+          </button>
+        </form>
+      )}
+
+      {sentCode && (
+        <div className="space-y-3">
+          <div className="text-sm">Введите код, отправленный на <b>{reg.email}</b>.</div>
+          <input
+            className="w-full px-3 py-2 rounded-xl border dark:bg-gray-800 dark:border-gray-700"
+            placeholder="6-значный код"
+            value={code}
+            onChange={(e)=>setCode(e.target.value)}
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={()=>{
+                if(code.trim()===String(sentCode).trim()){
+                  const payload = { name: reg.name, email: reg.email, country: reg.country, level: reg.level, verifiedAt: Date.now() };
+                  try { localStorage.setItem('uc.user', JSON.stringify(payload)); } catch {}
+                  setShowReg(false);
+                } else {
+                  alert('Неверный код. Попробуйте ещё раз.');
+                }
+              }}
+              className="flex-1 px-4 py-2 rounded-xl bg-brand-600 text-white hover:bg-brand-700"
+            >
+              Подтвердить
+            </button>
+            <button
+              onClick={()=>{ setSentCode(null); setCode(''); }}
+              className="px-4 py-2 rounded-xl border dark:border-gray-700"
+            >
+              Изменить email
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+)}/>
+                </div>
+
+                <div>
+                  <label className="block text-sm mb-1">Gmail</label>
+                  <input className="w-full px-3 py-2 rounded-xl border dark:bg-gray-800 dark:border-gray-700" 
+                         type="email"
+                         placeholder="you@gmail.com"
+                         value={reg.email}
+                         onChange={e=>setReg({...reg, email:e.target.value})}/>
+                  <div className="text-xs text-gray-500 mt-1">Только адреса на gmail.com</div>
+                </div>
+
+                <div>
+                  <label className="block text-sm mb-1">Страна</label>
+                  <input className="w-full px-3 py-2 rounded-xl border dark:bg-gray-800 dark:border-gray-700" 
+                         placeholder="Казахстан"
+                         value={reg.country}
+                         onChange={e=>setReg({...reg, country:e.target.value})}/>
+                </div>
+
+                <button
+                  onClick={()=>{
+                    if(!reg.name||!reg.country||!reg.email) { alert('Заполните имя, gmail и страну.'); return; }
+                    if(!/^[^@]+@gmail\.com$/i.test(reg.email)) { alert('Укажите корректный Gmail (только @gmail.com).'); return; }
+                    const code = String(Math.floor(100000 + Math.random()*900000));
+                    setSentCode(code);
+                    // имитация отправки письма
+                    alert('Код отправлен на '+reg.email+': '+code);
+                  }}
+                  type="button"
+                  className="w-full px-4 py-2 rounded-xl bg-brand-600 text-white"
+                >
+                  Отправить код
+                </button>
+              </form>
+            )}
+
+            {sentCode && (
+              <div className="space-y-3">
+                <div className="text-sm">Введите 6-значный код, отправленный на <b>{reg.email}</b>.</div>
+                <input
+                  className="w-full px-3 py-2 rounded-xl border dark:bg-gray-800 dark:border-gray-700"
+                  placeholder="______"
+                  maxLength={6}
+                  value={code}
+                  onChange={e=>setCode(e.target.value.replace(/\D/g,''))}
+                />
+                <button
+                  onClick={()=>{
+                    if(code===sentCode){
+                      localStorage.setItem('uc.user', JSON.stringify({...reg, createdAt: Date.now()}));
+                      setShowReg(false);
+                    } else {
+                      alert('Неверный код. Проверьте письмо и введите снова.');
+                    }
+                  }}
+                  className="w-full px-4 py-2 rounded-xl bg-brand-600 text-white hover:bg-brand-700"
+                >
+                  Подтвердить
+                </button>
+                <button
+                  onClick={()=> setSentCode(null)}
+                  className="w-full px-4 py-2 rounded-xl border dark:border-gray-700"
+                >
+                  Отправить код еще раз
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}/>
+                <div className="text-xs text-gray-500 mt-1">Подсказка: укажите имя, как в анкете поступления.</div>
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Email</label>
+                <input className="w-full px-3 py-2 rounded-xl border dark:bg-gray-800 dark:border-gray-700" 
+                       type="email" placeholder="name@example.com" value={reg.email} onChange={e=>setReg({...reg, email:e.target.value})}/>
+                <div className="text-xs text-gray-500 mt-1">На этот адрес будут отправляться напоминания о дедлайнах.</div>
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Страна</label>
+                <input className="w-full px-3 py-2 rounded-xl border dark:bg-gray-800 dark:border-gray-700" 
+                       placeholder="Казахстан" value={reg.country} onChange={e=>setReg({...reg, country:e.target.value})}/>
+                <div className="text-xs text-gray-500 mt-1">Подсказка: страна проживания или из которой подаете документы.</div>
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Уровень</label>
+                <select className="w-full px-3 py-2 rounded-xl border dark:bg-gray-800 dark:border-gray-700"
+                        value={reg.level} onChange={e=>setReg({...reg, level:e.target.value})}>
+                  <option>Bachelor</option>
+                  <option>Foundation</option>
+                  <option>Master</option>
+                </select>
+              </div>
+              <button type="submit" className="w-full px-4 py-2 rounded-xl bg-brand-600 text-white">Продолжить</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <div className="card p-4">
+        <SearchBar
+          placeholder="Найди университет, страну, город или специальность…"
+          items={suggestItems}
+          onPick={(it)=> setList(all.filter(u=> 
+            u.name===it || u.country===it || u.city===it || (u.strengths||[]).includes(it)
+          ))}
+          onSubmit={(q)=> applyFilters(q)}
+          className="mb-2"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-3">
+          <div className="card p-4 mb-4">
+            <div className="text-sm text-gray-700 dark:text-gray-300">
+              Подсказка по фильтрам: укажите страну, город, специальности (можно несколько), максимум tuition, минимальный рейтинг и т.д.
+            </div>
+          </div>
+          <Filters onApply={setFilters} resultCount={list.length}/>
+        </div>
+
+        <div className="lg:col-span-9 space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm text-gray-600 dark:text-gray-300">Найдено: <b>{list.length}</b> из {all.length}</div>
+            <button onClick={()=> setShowJSON(s=>!s)} className="px-3 py-2 rounded-xl border dark:border-gray-700">
+              {showJSON? 'Скрыть JSON' : 'Показать JSON'}
+            </button>
+          </div>
+
+          {showJSON && (
+            <div className="card p-3 overflow-auto max-h-[40vh]">
+              <pre className="text-xs whitespace-pre-wrap break-words">{JSON.stringify(list, null, 2)}</pre>
+            </div>
+          )}
+
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {list.map(u=> (<Card key={u.id} u={u}/>))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
