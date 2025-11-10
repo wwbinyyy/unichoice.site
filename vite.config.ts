@@ -22,18 +22,21 @@ export default defineConfig(async ({ mode }) => {
       alias: {
         "@": path.resolve(__dirname, "client", "src"),
         "@shared": path.resolve(__dirname, "shared"),
-        "@assets": path.resolve(__dirname, "attached_assets"),
-      },
+        "@assets": path.resolve(__dirname, "attached_assets")
+      }
     },
-    // фронт лежит в /client
     root: path.resolve(__dirname, "client"),
-    // билд кладём в корневой dist, чтобы Vercel легко нашёл
     build: {
       outDir: path.resolve(__dirname, "dist"),
-      emptyOutDir: true,
+      emptyOutDir: true
     },
     server: {
-      fs: { strict: true, deny: ["**/.*"] },
+      fs: { strict: true, deny: ["**/.*"] }
     },
+    css: {
+      postcss: {
+        from: undefined
+      }
+    }
   };
 });
