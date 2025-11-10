@@ -81,7 +81,7 @@ const norm = (u) => {
 
 export async function loadUniversities() {
   if (_cache) return _cache;
-  const res = await fetch('/data/universities.json', { cache: 'no-store' });
+  const res = await fetch((import.meta.env.BASE_URL || './') + 'data/universities.json', { cache: 'no-store' });
   if (!res.ok) throw new Error(`Cannot load /data/universities.json (${res.status})`);
   const json = await res.json();
   const src = Array.isArray(json) ? json : (json?.universities ?? []);
