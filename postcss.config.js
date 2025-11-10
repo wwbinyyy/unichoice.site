@@ -4,3 +4,10 @@ export default {
     autoprefixer: {},
   },
 }
+module.exports = {
+  from: undefined, // снимает warning про 'from'
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {}
+  }
+};
