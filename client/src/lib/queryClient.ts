@@ -7,12 +7,21 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+// Функция для автокоррекции путей — добавляет "/" если нужно
+function normalizeUrl(url: string) {
+  if (url.startsWith("http")) return url;
+  if (!url.startsWith("/")) return "/" + url;
+  return url;
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const res = await fetch(url, {
+  const fixedUrl = normalizeUrl(url);
+
+  const res = await fetch(fixedUrl, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
@@ -29,7 +38,9 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    const url = normalizeUrl(queryKey.join("/") as string);
+
+    const res = await fetch(url, {
       credentials: "include",
     });
 
